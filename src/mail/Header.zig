@@ -76,31 +76,6 @@ pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
     return allocator.dupe(u8, trimmed);
 }
 
-/// Decodes an RFC2047 encoded word.
-pub fn mimeDecode(allocator: std.mem.Allocator, str: []const u8) ![]const u8 {
-    if (!std.mem.startsWith(u8, str, "=?")) return error.InvalidMimeEncoding;
-    if (!std.mem.endsWith(u8, str, "?=")) return error.InvalidMimeEncoding;
-    const word = str[2 .. str.len - 2];
-    var iter = std.mem.splitScalar(u8, word, '?');
-    const charset = iter.next() orelse return error.InvalidMimeEncoding;
-    _ = charset; // autofix
-    const encoding = iter.next() orelse return error.InvalidMimeEncoding;
-    const content = iter.next() orelse return error.InvalidMimeEncoding;
-
-    if (encoding.len != 1) return error.InvalidMimeEncoding;
-    switch (encoding[0]) {
-        'B', 'b' => {
-            var decoder = std.base64.standard.Decoder;
-            const n = try decoder.calcSizeForSlice(content);
-            const buf = try allocator.alloc(u8, n);
-            try decoder.decode(buf, content);
-            return buf;
-        }, // base64
-        // 'Q', 'q' => return mime.decodeWord(allocator, content), // quoted-printable
-        else => return error.InvalidMimeEncoding,
-    }
-}
-
 test "asText" {
     const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
     const text = try hdr.asText(std.testing.allocator);
