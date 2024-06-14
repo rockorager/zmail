@@ -73,13 +73,35 @@ pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
     const unfolded = self.unfold(buf);
     const trimmed = std.mem.trim(u8, unfolded, " ");
 
-    return allocator.dupe(u8, trimmed);
+    var list = std.ArrayList(u8).init(local);
+    var mimeIter: mime.Word.Iterator = .{ .bytes = trimmed };
+
+    var i: usize = 0;
+    while (mimeIter.next()) |word| {
+        // Append up to the word
+        try list.appendSlice(trimmed[i..word.pos]);
+        // Decode the word
+        const decoded = try word.decode(local);
+        // Append  the decoded word
+        try list.appendSlice(decoded);
+        i = word.pos + word.len;
+    } else try list.appendSlice(trimmed[i..]);
+    return allocator.dupe(u8, list.items);
 }
 
 test "asText" {
-    const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
-    const text = try hdr.asText(std.testing.allocator);
-    defer std.testing.allocator.free(text);
+    {
+        const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+        const text = try hdr.asText(std.testing.allocator);
+        try std.testing.expectEqualStrings("foo bar", text);
+        defer std.testing.allocator.free(text);
+    }
+    {
+        const hdr: Header = .{ .key = "From", .value = "foo =?utf-8?b?Q2Fmw6k=?=\r\n bar" };
+        const text = try hdr.asText(std.testing.allocator);
+        try std.testing.expectEqualStrings("foo Café bar", text);
+        defer std.testing.allocator.free(text);
+    }
 }
 
 test "unfolding" {
