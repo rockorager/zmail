@@ -45,6 +45,14 @@ pub const Header = struct {
         return buf[0..n];
     }
 
+    /// Writes the header to the writer. Includes a CRLF after the header
+    pub fn writeTo(self: Header, writer: std.io.AnyWriter) !void {
+        try writer.writeAll(self.key);
+        try writer.writeByte(':');
+        try writer.writeAll(self.value);
+        try writer.writeAll(grammar.CRLF);
+    }
+
     test "unfolding" {
         const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
         var buf: [7]u8 = undefined;
