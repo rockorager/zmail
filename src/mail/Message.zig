@@ -5,7 +5,8 @@ const std = @import("std");
 
 /// The entire message, byte for byte
 src: []const u8,
-/// The header section of the message
+/// The header section of the message. Does not include trailing \r\n for last header, nor empty
+/// line separating from the body
 headers: []const u8,
 /// The body section of the message
 body: []const u8,

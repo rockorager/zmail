@@ -2,6 +2,7 @@ const Header = @This();
 
 const std = @import("std");
 const abnf = @import("../abnf.zig");
+const mime = @import("mime.zig");
 
 /// An email header
 key: []const u8,
@@ -38,12 +39,72 @@ pub fn unfold(self: Header, buf: []u8) []const u8 {
     return buf[0..n];
 }
 
-/// Writes the header to the writer. Includes a CRLF after the header
-pub fn writeTo(self: Header, writer: std.io.AnyWriter) !void {
-    try writer.writeAll(self.key);
-    try writer.writeByte(':');
-    try writer.writeAll(self.value);
-    try writer.writeAll(abnf.CRLF);
+pub fn format(
+    self: Header,
+    comptime fmt: []const u8,
+    options: std.fmt.FormatOptions,
+    writer: anytype,
+) !void {
+    _ = options;
+    _ = fmt;
+    try writer.print("{s}:{s}\r\n", .{ self.key, self.value });
+}
+
+/// The raw bytes of the header value, excluding the separating ':', up to but excluding the
+/// terminating CRLF
+pub fn asRaw(self: Header) []const u8 {
+    return self.value;
+}
+
+/// Caller owns the returned string. The following transformations occur:
+/// 1. Unfolded
+/// 2. Remove terminating CRLF
+/// 3. Trim whitespace at beginning and end of value
+/// 4. MIME-decoded
+pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
+    // Use an arena, we'll have possibly several allocations
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var local = arena.allocator();
+
+    const len = self.unfoldedLen();
+    const buf = try local.alloc(u8, len);
+    const unfolded = self.unfold(buf);
+    const trimmed = std.mem.trim(u8, unfolded, " ");
+
+    return allocator.dupe(u8, trimmed);
+}
+
+/// Decodes an RFC2047 encoded word.
+pub fn mimeDecode(allocator: std.mem.Allocator, str: []const u8) ![]const u8 {
+    if (!std.mem.startsWith(u8, str, "=?")) return error.InvalidMimeEncoding;
+    if (!std.mem.endsWith(u8, str, "?=")) return error.InvalidMimeEncoding;
+    const word = str[2 .. str.len - 2];
+    var iter = std.mem.splitScalar(u8, word, '?');
+    const charset = iter.next() orelse return error.InvalidMimeEncoding;
+    _ = charset; // autofix
+    const encoding = iter.next() orelse return error.InvalidMimeEncoding;
+    const content = iter.next() orelse return error.InvalidMimeEncoding;
+
+    if (encoding.len != 1) return error.InvalidMimeEncoding;
+    switch (encoding[0]) {
+        'B', 'b' => {
+            var decoder = std.base64.standard.Decoder;
+            const n = try decoder.calcSizeForSlice(content);
+            const buf = try allocator.alloc(u8, n);
+            try decoder.decode(buf, content);
+            return buf;
+        }, // base64
+        // 'Q', 'q' => return mime.decodeWord(allocator, content), // quoted-printable
+        else => return error.InvalidMimeEncoding,
+    }
+}
+
+test "asText" {
+    const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+    const text = try hdr.asText(std.testing.allocator);
+    defer std.testing.allocator.free(text);
 }
 
 test "unfolding" {
@@ -53,6 +114,14 @@ test "unfolding" {
     try std.testing.expectEqual(7, hdr.unfoldedLen());
     const unfolded = hdr.unfold(&buf);
     try std.testing.expectEqualStrings("foo bar", unfolded);
+}
+
+test "format" {
+    const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+    var buf: [64]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try hdr.format("", .{}, fbs.writer().any());
+    try std.testing.expectEqualStrings("From:foo\r\n bar\r\n", buf[0..16]);
 }
 
 pub const Iterator = struct {
