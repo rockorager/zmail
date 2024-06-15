@@ -1,7 +1,12 @@
 .{
     .name = "zig-mail",
     .version = "0.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .zeit = .{
+            .url = "git+https://github.com/rockorager/zeit?ref=main#32ea1debb8baaf7b7ffb90a8bfc5874a78a9b19e",
+            .hash = "12204662c261f5fa41ee9156adf8094877592e5b25ccef9d8edac367ae787583c4f9",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

@@ -1,6 +1,7 @@
 const Header = @This();
 
 const std = @import("std");
+const zeit = @import("zeit");
 const abnf = @import("../abnf.zig");
 const mime = @import("mime.zig");
 
@@ -142,6 +143,23 @@ test "asMessageIds" {
     try std.testing.expectEqual(2, ids.len);
     try std.testing.expectEqualStrings("abc", ids[0]);
     try std.testing.expectEqualStrings("def", ids[1]);
+}
+
+/// Parses the header as a date.
+pub fn asDate(self: Header) !zeit.Time {
+    return zeit.Time.fromRFC5322(self.value);
+}
+
+test "asDate" {
+    const hdr: Header = .{ .key = "Date", .value = "Tue, 1 Jul 2003 10:52:37 +0200" };
+    const date = try hdr.asDate();
+    try std.testing.expectEqual(2003, date.year);
+    try std.testing.expectEqual(.jul, date.month);
+    try std.testing.expectEqual(1, date.day);
+    try std.testing.expectEqual(10, date.hour);
+    try std.testing.expectEqual(52, date.minute);
+    try std.testing.expectEqual(37, date.second);
+    try std.testing.expectEqual(7200, date.offset);
 }
 
 test "unfolding" {
