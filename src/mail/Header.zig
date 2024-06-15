@@ -4,6 +4,8 @@ const std = @import("std");
 const abnf = @import("../abnf.zig");
 const mime = @import("mime.zig");
 
+const Address = @import("Address.zig");
+
 /// An email header
 key: []const u8,
 value: []const u8,
@@ -102,6 +104,44 @@ test "asText" {
         try std.testing.expectEqualStrings("foo Café bar", text);
         defer std.testing.allocator.free(text);
     }
+}
+
+/// Parses the header as an Address list. The following transformations occur:
+/// 1. Quotes around display names are removed
+/// 2. Any quoted-pair in a display name is decoded
+/// 3. Unfolding, as needed
+/// 4. Trim whitespace at beginning and end of value
+/// 5. Any group information is stripped
+///
+/// Caller owns the returned slice
+pub fn asAddresses(_: Header, _: std.mem.Allocator) ![]Address {
+    @panic("unimplemented");
+}
+
+/// Parses the header as a list of MessageIds. The following transformations occur:
+/// 1. Unfolded
+/// 2. Surrounding <> removed
+pub fn asMessageIds(self: Header, allocator: std.mem.Allocator) ![]const []const u8 {
+    var i: usize = 0;
+    var list = std.ArrayList([]const u8).init(allocator);
+    defer list.deinit();
+    while (i < self.value.len) {
+        const start = std.mem.indexOfScalarPos(u8, self.value, i, '<') orelse return error.InvalidMessageID;
+        const end = std.mem.indexOfScalarPos(u8, self.value, start + 1, '>') orelse return error.InvalidMessageID;
+        try list.append(self.value[start + 1 .. end]);
+        i = end + 1;
+    }
+    return allocator.dupe([]const u8, list.items);
+}
+
+test "asMessageIds" {
+    const allocator = std.testing.allocator;
+    const hdr: Header = .{ .key = "Message-ID", .value = "<abc> <def>" };
+    const ids = try hdr.asMessageIds(allocator);
+    defer std.testing.allocator.free(ids);
+    try std.testing.expectEqual(2, ids.len);
+    try std.testing.expectEqualStrings("abc", ids[0]);
+    try std.testing.expectEqualStrings("def", ids[1]);
 }
 
 test "unfolding" {
