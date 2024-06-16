@@ -7,8 +7,10 @@ const mime = @import("mime.zig");
 
 const Address = @import("Address.zig");
 
+const log = std.log.scoped(.zmail);
+
 /// An email header
-key: []const u8,
+name: []const u8,
 value: []const u8,
 
 /// Print a formatted header. Includes the trailing \r\n
@@ -20,7 +22,7 @@ pub fn format(
 ) !void {
     _ = options;
     _ = fmt;
-    try writer.print("{s}:{s}\r\n", .{ self.key, self.value });
+    try writer.print("{s}:{s}\r\n", .{ self.name, self.value });
 }
 
 /// Returns true if the header value is considered "folded". Folded headers contain CRLF
@@ -95,13 +97,13 @@ pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
 
 test "asText" {
     {
-        const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+        const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
         const text = try hdr.asText(std.testing.allocator);
         try std.testing.expectEqualStrings("foo bar", text);
         defer std.testing.allocator.free(text);
     }
     {
-        const hdr: Header = .{ .key = "From", .value = "foo =?utf-8?b?Q2Fmw6k=?=\r\n bar" };
+        const hdr: Header = .{ .name = "From", .value = "foo =?utf-8?b?Q2Fmw6k=?=\r\n bar" };
         const text = try hdr.asText(std.testing.allocator);
         try std.testing.expectEqualStrings("foo Café bar", text);
         defer std.testing.allocator.free(text);
@@ -138,7 +140,7 @@ pub fn asMessageIds(self: Header, allocator: std.mem.Allocator) ![]const []const
 
 test "asMessageIds" {
     const allocator = std.testing.allocator;
-    const hdr: Header = .{ .key = "Message-ID", .value = "<abc> <def>" };
+    const hdr: Header = .{ .name = "Message-ID", .value = "<abc> <def>" };
     const ids = try hdr.asMessageIds(allocator);
     defer std.testing.allocator.free(ids);
     try std.testing.expectEqual(2, ids.len);
@@ -152,7 +154,7 @@ pub fn asDate(self: Header) !zeit.Time {
 }
 
 test "asDate" {
-    const hdr: Header = .{ .key = "Date", .value = "Tue, 1 Jul 2003 10:52:37 +0200" };
+    const hdr: Header = .{ .name = "Date", .value = "Tue, 1 Jul 2003 10:52:37 +0200" };
     const date = try hdr.asDate();
     try std.testing.expectEqual(2003, date.year);
     try std.testing.expectEqual(.jul, date.month);
@@ -164,7 +166,7 @@ test "asDate" {
 }
 
 test "unfolding" {
-    const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+    const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
     var buf: [7]u8 = undefined;
     try std.testing.expect(hdr.isFolded());
     try std.testing.expectEqual(7, hdr.unfoldedLen());
@@ -173,7 +175,7 @@ test "unfolding" {
 }
 
 test "format" {
-    const hdr: Header = .{ .key = "From", .value = "foo\r\n bar" };
+    const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
     var buf: [64]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
     try hdr.format("", .{}, fbs.writer().any());
@@ -187,17 +189,14 @@ pub const Iterator = struct {
     /// Returns the next header. The header value will be in it's raw form, including any
     /// preceding space after the ':' field delimiter, including any folding white space, but excluding
     /// the trailing CRLF
-    pub fn next(self: *Iterator) error{InvalidHeader}!?Header {
+    pub fn next(self: *Iterator) ?Header {
         if (self.idx >= self.src.len) return null;
 
         const start = self.idx;
-        const sep = std.mem.indexOfScalarPos(u8, self.src, start, ':') orelse return error.InvalidHeader;
         const end = while (true) {
-            const eol = std.mem.indexOfPos(u8, self.src, self.idx, abnf.CRLF) orelse {
-                // Last header line
-                self.idx = self.src.len;
-                return .{ .key = self.src[start..sep], .value = self.src[sep + 1 ..] };
-            };
+            const eol = std.mem.indexOfPos(u8, self.src, self.idx, abnf.CRLF) orelse unreachable; // We
+            // always have a CRLF at the end of the header section
+            // Last header line
             defer self.idx = eol + 2;
 
             // Peek to byte on next line. If it is WSP, we continue on. Otherwise it's a new field
@@ -207,40 +206,44 @@ pub const Iterator = struct {
                 break eol;
         };
         defer self.idx = end + 2;
-        return .{ .key = self.src[start..sep], .value = self.src[sep + 1 .. end] };
+        const sep = std.mem.indexOfScalarPos(u8, self.src, start, ':') orelse {
+            log.warn("header missing ':': {s}", .{self.src[start..end]});
+            return null;
+        };
+        return .{ .name = self.src[start..sep], .value = self.src[sep + 1 .. end] };
     }
 
     test "multiple headers" {
-        var iter: Header.Iterator = .{ .src = "From:foo\r\nTo:bar" };
-        var hdr = try iter.next();
+        var iter: Header.Iterator = .{ .src = "From:foo\r\nTo:bar\r\n" };
+        var hdr = iter.next();
         try std.testing.expect(hdr != null);
-        try std.testing.expectEqualStrings("From", hdr.?.key);
+        try std.testing.expectEqualStrings("From", hdr.?.name);
         try std.testing.expectEqualStrings("foo", hdr.?.value);
-        hdr = try iter.next();
+        hdr = iter.next();
         try std.testing.expect(hdr != null);
-        try std.testing.expectEqualStrings("To", hdr.?.key);
+        try std.testing.expectEqualStrings("To", hdr.?.name);
         try std.testing.expectEqualStrings("bar", hdr.?.value);
-        hdr = try iter.next();
+        hdr = iter.next();
         try std.testing.expect(hdr == null);
     }
 
     test "folding white space" {
         {
-            var iter: Header.Iterator = .{ .src = "From:foo\r\n folding white space" };
-            var hdr = try iter.next();
+            var iter: Header.Iterator = .{ .src = "From:foo\r\n folding white space\r\n" };
+            var hdr = iter.next();
             try std.testing.expect(hdr != null);
-            try std.testing.expectEqualStrings("From", hdr.?.key);
+            try std.testing.expectEqualStrings("From", hdr.?.name);
             try std.testing.expectEqualStrings("foo\r\n folding white space", hdr.?.value);
-            hdr = try iter.next();
+            hdr = iter.next();
             try std.testing.expect(hdr == null);
         }
         {
             var iter: Header.Iterator = .{ .src = "From:foo\r\n\tfolding white space\r\n" };
-            var hdr = try iter.next();
+            var hdr = iter.next();
             try std.testing.expect(hdr != null);
-            try std.testing.expectEqualStrings("From", hdr.?.key);
+            try std.testing.expectEqualStrings("From", hdr.?.name);
             try std.testing.expectEqualStrings("foo\r\n\tfolding white space", hdr.?.value);
-            hdr = try iter.next();
+            hdr = iter.next();
             try std.testing.expect(hdr == null);
         }
     }

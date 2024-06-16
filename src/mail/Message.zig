@@ -2,11 +2,12 @@
 const Message = @This();
 
 const std = @import("std");
+const Header = @import("Header.zig");
 
 /// The entire message, byte for byte
 src: []const u8,
-/// The header section of the message. Does not include trailing \r\n for last header, nor empty
-/// line separating from the body
+/// The header section of the message. Does not include the empty line separating the headers from
+/// the body
 headers: []const u8,
 /// The body section of the message
 body: []const u8,
