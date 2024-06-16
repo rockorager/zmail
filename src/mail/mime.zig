@@ -1,6 +1,6 @@
 const std = @import("std");
 
-/// A mime encoded word
+/// A mime encoded word, as defined in RFC2047
 pub const Word = struct {
     /// The position in the original slice of the beginning of the mime encoded word
     pos: usize,
@@ -57,6 +57,8 @@ pub const Word = struct {
 
     /// Decodes the word
     pub fn decode(self: Word, allocator: std.mem.Allocator) ![]const u8 {
+        // TODO: support more charset encodings
+        if (!std.ascii.eqlIgnoreCase(self.charset, "utf-8")) return error.UnsupportedCharset;
         switch (self.encoding) {
             'B', 'b' => {
                 var decoder = std.base64.standard.Decoder;
