@@ -2,6 +2,7 @@
 const Message = @This();
 
 const std = @import("std");
+const abnf = @import("../abnf.zig");
 const Header = @import("Header.zig");
 
 /// The entire message, byte for byte
@@ -13,7 +14,9 @@ headers: []const u8,
 body: []const u8,
 
 pub fn init(src: []const u8) !Message {
-    const sep = std.mem.indexOf(u8, src, "\r\n\r\n") orelse {
+    const sep = std.mem.indexOf(u8, src, abnf.CRLF ++ abnf.CRLF) orelse {
+        // No matter what, we must end with CRLF
+        if (!std.mem.endsWith(u8, src, abnf.CRLF)) return error.InvalidMessageFormat;
         return .{
             .src = src,
             .headers = src,
@@ -22,7 +25,7 @@ pub fn init(src: []const u8) !Message {
     };
     return .{
         .src = src,
-        .headers = src[0..sep],
+        .headers = src[0 .. sep + 2],
         .body = src[sep + 4 ..],
     };
 }
