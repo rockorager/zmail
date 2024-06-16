@@ -11,6 +11,18 @@ const Address = @import("Address.zig");
 key: []const u8,
 value: []const u8,
 
+/// Print a formatted header. Includes the trailing \r\n
+pub fn format(
+    self: Header,
+    comptime fmt: []const u8,
+    options: std.fmt.FormatOptions,
+    writer: anytype,
+) !void {
+    _ = options;
+    _ = fmt;
+    try writer.print("{s}:{s}\r\n", .{ self.key, self.value });
+}
+
 /// Returns true if the header value is considered "folded". Folded headers contain CRLF
 /// followed by whitespace and must be "unfolded" prior to semantic analysis
 pub fn isFolded(self: Header) bool {
@@ -40,17 +52,6 @@ pub fn unfold(self: Header, buf: []u8) []const u8 {
         i = idx + 2;
     }
     return buf[0..n];
-}
-
-pub fn format(
-    self: Header,
-    comptime fmt: []const u8,
-    options: std.fmt.FormatOptions,
-    writer: anytype,
-) !void {
-    _ = options;
-    _ = fmt;
-    try writer.print("{s}:{s}\r\n", .{ self.key, self.value });
 }
 
 /// The raw bytes of the header value, excluding the separating ':', up to but excluding the
