@@ -17,11 +17,12 @@ pub fn build(b: *std.Build) void {
     zmail_mod.addImport("zeit", zeit_dep.module("zeit"));
 
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("test/root.zig"),
         .target = target,
         .optimize = optimize,
     });
     lib_unit_tests.root_module.addImport("zeit", zeit_dep.module("zeit"));
+    lib_unit_tests.root_module.addImport("zmail", zmail_mod);
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 

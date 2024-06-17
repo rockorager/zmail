@@ -29,3 +29,29 @@ pub fn init(src: []const u8) !Message {
         .body = src[sep + 4 ..],
     };
 }
+
+pub fn headerIterator(self: Message) Header.Iterator {
+    return .{ .src = self.headers };
+}
+
+/// A MIME entity
+pub const Part = struct {
+    headers: []const u8,
+    body: []const u8,
+
+    parent: ?*Part,
+    children: ?[]*Part,
+
+    pub fn isMultipart(self: Part) bool {
+        var iter: Header.Iterator = .{ .src = self.headers };
+        while (iter.next()) |hdr| {
+            if (std.ascii.eqlIgnoreCase("Content-Type", hdr.name)) {
+                if (std.mem.indexOf(u8, hdr.value, "multipart/")) |_|
+                    return true
+                else
+                    return false;
+            }
+        }
+        return false;
+    }
+};

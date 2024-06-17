@@ -95,21 +95,6 @@ pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
     return allocator.dupe(u8, list.items);
 }
 
-test "asText" {
-    {
-        const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
-        const text = try hdr.asText(std.testing.allocator);
-        try std.testing.expectEqualStrings("foo bar", text);
-        defer std.testing.allocator.free(text);
-    }
-    {
-        const hdr: Header = .{ .name = "From", .value = "foo =?utf-8?b?Q2Fmw6k=?=\r\n bar" };
-        const text = try hdr.asText(std.testing.allocator);
-        try std.testing.expectEqualStrings("foo Café bar", text);
-        defer std.testing.allocator.free(text);
-    }
-}
-
 /// Parses the header as an Address list. The following transformations occur:
 /// 1. Quotes around display names are removed
 /// 2. Any quoted-pair in a display name is decoded
@@ -138,48 +123,9 @@ pub fn asMessageIds(self: Header, allocator: std.mem.Allocator) ![]const []const
     return allocator.dupe([]const u8, list.items);
 }
 
-test "asMessageIds" {
-    const allocator = std.testing.allocator;
-    const hdr: Header = .{ .name = "Message-ID", .value = "<abc> <def>" };
-    const ids = try hdr.asMessageIds(allocator);
-    defer std.testing.allocator.free(ids);
-    try std.testing.expectEqual(2, ids.len);
-    try std.testing.expectEqualStrings("abc", ids[0]);
-    try std.testing.expectEqualStrings("def", ids[1]);
-}
-
 /// Parses the header as a date.
 pub fn asDate(self: Header) !zeit.Time {
     return zeit.Time.fromRFC5322(self.value);
-}
-
-test "asDate" {
-    const hdr: Header = .{ .name = "Date", .value = "Tue, 1 Jul 2003 10:52:37 +0200" };
-    const date = try hdr.asDate();
-    try std.testing.expectEqual(2003, date.year);
-    try std.testing.expectEqual(.jul, date.month);
-    try std.testing.expectEqual(1, date.day);
-    try std.testing.expectEqual(10, date.hour);
-    try std.testing.expectEqual(52, date.minute);
-    try std.testing.expectEqual(37, date.second);
-    try std.testing.expectEqual(7200, date.offset);
-}
-
-test "unfolding" {
-    const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
-    var buf: [7]u8 = undefined;
-    try std.testing.expect(hdr.isFolded());
-    try std.testing.expectEqual(7, hdr.unfoldedLen());
-    const unfolded = hdr.unfold(&buf);
-    try std.testing.expectEqualStrings("foo bar", unfolded);
-}
-
-test "format" {
-    const hdr: Header = .{ .name = "From", .value = "foo\r\n bar" };
-    var buf: [64]u8 = undefined;
-    var fbs = std.io.fixedBufferStream(&buf);
-    try hdr.format("", .{}, fbs.writer().any());
-    try std.testing.expectEqualStrings("From:foo\r\n bar\r\n", buf[0..16]);
 }
 
 pub const Iterator = struct {
@@ -211,40 +157,5 @@ pub const Iterator = struct {
             return null;
         };
         return .{ .name = self.src[start..sep], .value = self.src[sep + 1 .. end] };
-    }
-
-    test "multiple headers" {
-        var iter: Header.Iterator = .{ .src = "From:foo\r\nTo:bar\r\n" };
-        var hdr = iter.next();
-        try std.testing.expect(hdr != null);
-        try std.testing.expectEqualStrings("From", hdr.?.name);
-        try std.testing.expectEqualStrings("foo", hdr.?.value);
-        hdr = iter.next();
-        try std.testing.expect(hdr != null);
-        try std.testing.expectEqualStrings("To", hdr.?.name);
-        try std.testing.expectEqualStrings("bar", hdr.?.value);
-        hdr = iter.next();
-        try std.testing.expect(hdr == null);
-    }
-
-    test "folding white space" {
-        {
-            var iter: Header.Iterator = .{ .src = "From:foo\r\n folding white space\r\n" };
-            var hdr = iter.next();
-            try std.testing.expect(hdr != null);
-            try std.testing.expectEqualStrings("From", hdr.?.name);
-            try std.testing.expectEqualStrings("foo\r\n folding white space", hdr.?.value);
-            hdr = iter.next();
-            try std.testing.expect(hdr == null);
-        }
-        {
-            var iter: Header.Iterator = .{ .src = "From:foo\r\n\tfolding white space\r\n" };
-            var hdr = iter.next();
-            try std.testing.expect(hdr != null);
-            try std.testing.expectEqualStrings("From", hdr.?.name);
-            try std.testing.expectEqualStrings("foo\r\n\tfolding white space", hdr.?.value);
-            hdr = iter.next();
-            try std.testing.expect(hdr == null);
-        }
     }
 };
