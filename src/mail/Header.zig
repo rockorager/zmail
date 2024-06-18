@@ -127,35 +127,3 @@ pub fn asMessageIds(self: Header, allocator: std.mem.Allocator) ![]const []const
 pub fn asDate(self: Header) !zeit.Time {
     return zeit.Time.fromRFC5322(self.value);
 }
-
-pub const Iterator = struct {
-    src: []const u8,
-    idx: usize = 0,
-
-    /// Returns the next header. The header value will be in it's raw form, including any
-    /// preceding space after the ':' field delimiter, including any folding white space, but excluding
-    /// the trailing CRLF
-    pub fn next(self: *Iterator) ?Header {
-        if (self.idx >= self.src.len) return null;
-
-        const start = self.idx;
-        const end = while (true) {
-            const eol = std.mem.indexOfPos(u8, self.src, self.idx, abnf.CRLF) orelse unreachable; // We
-            // always have a CRLF at the end of the header section
-            // Last header line
-            defer self.idx = eol + 2;
-
-            // Peek to byte on next line. If it is WSP, we continue on. Otherwise it's a new field
-            if (eol + 2 < self.src.len and abnf.isWSP(self.src[eol + 2]))
-                continue
-            else
-                break eol;
-        };
-        defer self.idx = end + 2;
-        const sep = std.mem.indexOfScalarPos(u8, self.src, start, ':') orelse {
-            log.warn("header missing ':': {s}", .{self.src[start..end]});
-            return null;
-        };
-        return .{ .name = self.src[start..sep], .value = self.src[sep + 1 .. end] };
-    }
-};

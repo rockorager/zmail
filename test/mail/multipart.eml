@@ -1,0 +1,61 @@
+MIME-Version: 1.0
+From: Nathaniel Borenstein <nsb@nsb.fv.com>
+To: Ned Freed <ned@innosoft.com>
+Date: Fri, 07 Oct 1994 16:15:05 -0700 (PDT)
+Subject: A multipart example
+Content-Type: multipart/mixed;
+              boundary=unique-boundary-1
+
+This is the preamble area of a multipart message.
+Mail readers that understand multipart format
+should ignore this preamble.
+
+If you are reading this text, you might want to
+consider changing to a mail reader that understands
+how to properly display multipart messages.
+
+--unique-boundary-1
+
+Part 1
+
+--unique-boundary-1
+Content-type: text/plain; charset=US-ASCII
+
+A
+B
+C
+
+--unique-boundary-1
+Content-Type: multipart/parallel; boundary=unique-boundary-2
+
+--unique-boundary-2
+Content-Type: audio/basic
+Content-Transfer-Encoding: base64
+
+Nested multipart
+
+--unique-boundary-2
+Content-Type: image/jpeg
+Content-Transfer-Encoding: base64
+
+Another nested multipart
+
+--unique-boundary-2--
+
+--unique-boundary-1
+Content-type: text/enriched
+
+This is <bold><italic>enriched.</italic></bold>
+
+--unique-boundary-1
+Content-Type: message/rfc822
+
+From: (mailbox in US-ASCII)
+To: (address in US-ASCII)
+Subject: (subject in US-ASCII)
+Content-Type: Text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: Quoted-printable
+
+Some other message
+
+--unique-boundary-1--

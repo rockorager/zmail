@@ -107,3 +107,26 @@ pub const Word = struct {
         try std.testing.expectEqualStrings("François-Jérôme", decoded);
     }
 };
+
+pub const Parameter = struct {
+    attribute: []const u8,
+    value: []const u8,
+};
+
+/// Iterates over the parameters of a Content-Type header
+pub const ParameterIterator = struct {
+    src: []const u8,
+    idx: usize = 0,
+
+    pub fn next(self: *ParameterIterator) ?Parameter {
+        if (self.idx >= self.src.len) return null;
+        const end = std.mem.indexOfScalarPos(u8, self.src, self.idx, ';') orelse self.src.len;
+        defer self.idx = end + 1;
+        const trimmed = std.mem.trim(u8, self.src[self.idx..end], " \r\n\t");
+        const sep = std.mem.indexOfScalar(u8, trimmed, '=') orelse return null;
+        return .{
+            .attribute = trimmed[0..sep],
+            .value = trimmed[sep + 1 ..],
+        };
+    }
+};

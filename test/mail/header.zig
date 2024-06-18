@@ -2,12 +2,12 @@ const std = @import("std");
 const testing = std.testing;
 const mail = @import("zmail").mail;
 
-const header_test = @embedFile("header.eml");
-const msg = mail.Message.init(header_test) catch @panic("couldn't init header.eml test");
-var headers = msg.headerIterator();
-var allocator = testing.allocator;
-
 test "headers" {
+    const header_test = @embedFile("header.eml");
+    const msg = mail.Entity.init(header_test);
+    var headers = msg.headerIterator();
+    var allocator = testing.allocator;
+
     // asText with folding
     {
         const hdr = headers.next() orelse return error.UnexpectedNullHeader;
@@ -62,5 +62,10 @@ test "headers" {
     // End of headers
     {
         try testing.expect(headers.next() == null);
+    }
+
+    // Single part message
+    {
+        try testing.expect(msg.iterator() == null);
     }
 }
