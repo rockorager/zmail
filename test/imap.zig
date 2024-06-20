@@ -30,6 +30,11 @@ const TlsClient = struct {
             .writeFn = TlsClient.opaqueWrite,
         };
     }
+
+    pub fn close(self: *TlsClient) !void {
+        _ = try self.client.writeEnd(self.stream, "", true);
+        self.stream.close();
+    }
 };
 
 pub fn main() !void {
@@ -61,7 +66,6 @@ pub fn main() !void {
             opts.password = arg[password.len..];
         }
     }
-    std.log.debug("{s}", .{opts.password});
 
     const stream = try std.net.tcpConnectToHost(allocator, opts.host, 993);
     var tls_client: TlsClient = .{
@@ -71,7 +75,6 @@ pub fn main() !void {
 
     var client = imap.Client.init(allocator, tls_client.anyWriter(), tls_client.anyReader());
     const thread = try std.Thread.spawn(.{}, imap.Client.run, .{&client});
-    thread.detach();
 
     var capability = commands.Capability.init(allocator, client.nextTag());
     defer capability.deinit();
@@ -85,6 +88,15 @@ pub fn main() !void {
     try client.send(authenticate.command());
     try authenticate.wait();
     try client.send(capability.command());
-    const caps = capability.wait();
-    std.log.debug("caps: {s}", .{caps});
+    _ = try capability.wait();
+
+    var noop: commands.Noop = .{ .tag = client.nextTag() };
+    try client.send(noop.command());
+    try noop.wait();
+
+    var logout: commands.Logout = .{ .tag = client.nextTag() };
+    try client.send(logout.command());
+    try logout.wait();
+    thread.join();
+    try tls_client.close();
 }

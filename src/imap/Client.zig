@@ -67,6 +67,7 @@ pub fn run(self: *Client) !void {
                         _ = self.in_process_commands.orderedRemove(i);
                         break;
                     },
+                    .quit => return,
                 }
             } else std.log.err("unhandled line: {s}", .{line});
             // } else return;

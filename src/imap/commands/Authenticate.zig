@@ -1,7 +1,9 @@
 const Authenticate = @This();
 
 const std = @import("std");
+const imap = @import("../../imap.zig");
 const Command = @import("../Command.zig");
+const HandleResult = Command.HandleResult;
 const Result = Command.Result;
 const base64 = std.base64.standard;
 
@@ -18,8 +20,7 @@ pub const Mechanism = enum {
 
 mutex: std.Thread.Mutex = .{},
 cond: std.Thread.Condition = .{},
-done: bool = false,
-ok: bool = false,
+result: ?Result = null,
 
 allocator: std.mem.Allocator,
 /// the base64 encoded auth string
@@ -50,14 +51,15 @@ pub fn init(
 
 /// Waits for the command to finish and returns the capability string. The string is space
 /// separated, users of the library are encouraged to inspect the list however they please
-pub fn wait(self: *Authenticate) !void {
-    while (!self.done) {
+pub fn wait(self: *Authenticate) imap.Error!void {
+    while (self.result == null) {
         self.cond.wait(&self.mutex);
     }
-    if (self.ok)
-        return
-    else
-        return error.AuthenticationFailed;
+    switch (self.result.?) {
+        .ok => return,
+        .no => return error.AuthenticationFailed,
+        .bad => return error.InvalidArgumentsOrCommandUnknown,
+    }
 }
 
 pub fn command(self: *Authenticate) Command {
@@ -116,7 +118,7 @@ fn writeTo(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
     }
 }
 
-fn handleLine(ptr: *anyopaque, line: []const u8) !Result {
+fn handleLine(ptr: *anyopaque, line: []const u8) !HandleResult {
     if (line.len == 0) return .not_handled;
     const self: *Authenticate = @ptrCast(@alignCast(ptr));
     switch (self.mechanism) {
@@ -129,7 +131,7 @@ fn handleLine(ptr: *anyopaque, line: []const u8) !Result {
             if (tag != self.tag)
                 return .not_handled;
             const result = iter.next() orelse return .not_handled;
-            self.ok = std.ascii.eqlIgnoreCase(result, "ok");
+            self.result = try Result.fromString(result);
         },
         .login => {
             if (line[0] == '+') {
@@ -148,7 +150,7 @@ fn handleLine(ptr: *anyopaque, line: []const u8) !Result {
             if (tag != self.tag)
                 return .not_handled;
             const result = iter.next() orelse return .not_handled;
-            self.ok = std.ascii.eqlIgnoreCase(result, "ok");
+            self.result = try Result.fromString(result);
         },
         .oauth,
         .xoauth2,
@@ -165,11 +167,16 @@ fn handleLine(ptr: *anyopaque, line: []const u8) !Result {
             if (tag != self.tag)
                 return .not_handled;
             const result = iter.next() orelse return .not_handled;
-            self.ok = std.ascii.eqlIgnoreCase(result, "ok");
+            self.result = try Result.fromString(result);
         },
     }
-    self.done = true;
     self.cond.signal();
+    if (self.result) |res| {
+        switch (res) {
+            .ok => {},
+            else => log.warn("{s}: {s}", .{ name, line }),
+        }
+    }
 
     return .complete;
 }

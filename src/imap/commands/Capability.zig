@@ -1,8 +1,10 @@
 const Capability = @This();
 
 const std = @import("std");
+const imap = @import("../../imap.zig");
 const Command = @import("../Command.zig");
-const Result = Command.Result;
+const CommandResult = Command.Result;
+const Result = Command.HandleResult;
 
 const log = std.log.scoped(.imap);
 
@@ -11,7 +13,7 @@ const name = "CAPABILITY";
 mutex: std.Thread.Mutex = .{},
 cond: std.Thread.Condition = .{},
 cap_string: std.ArrayList(u8),
-done: bool = false,
+result: ?CommandResult = null,
 
 /// Get the next tag from the client
 tag: u16,
@@ -29,12 +31,15 @@ pub fn deinit(self: *Capability) void {
 
 /// Waits for the command to finish and returns the capability string. The string is space
 /// separated, users of the library are encouraged to inspect the list however they please
-pub fn wait(self: *Capability) []const u8 {
-    if (self.done) return self.cap_string.items;
-    while (!self.done) {
+pub fn wait(self: *Capability) ![]const u8 {
+    while (self.result == null) {
         self.cond.wait(&self.mutex);
     }
-    return self.cap_string.items;
+    switch (self.result.?) {
+        .ok => return self.cap_string.items,
+        .bad => return error.InvalidArguments,
+        else => return error.InvalidArguments,
+    }
 }
 
 pub fn command(self: *Capability) Command {
@@ -71,14 +76,13 @@ fn handleLine(ptr: *anyopaque, line: []const u8) !Result {
     const tag_parsed = try std.fmt.parseUnsigned(u8, tag, 16);
 
     if (tag_parsed == self.tag) {
-        self.done = true;
         defer self.cond.signal();
         const result = iter.next() orelse return .not_handled;
-
-        if (std.ascii.eqlIgnoreCase(result, "OK")) {
-            return .complete;
+        self.result = try CommandResult.fromString(result);
+        switch (self.result.?) {
+            .ok => {},
+            else => log.warn("{s}: {s}", .{ name, line }),
         }
-        log.err("unexpected result: {s}", .{line[3 + tag.len ..]});
         return .complete;
     }
 
