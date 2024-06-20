@@ -9,6 +9,7 @@ pub const Error = error{
     CannotStartTLS,
     InvalidArguments,
     InvalidArgumentsOrCommandUnknown,
+    LoginFailed,
 };
 
 test {
