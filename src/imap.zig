@@ -6,6 +6,7 @@ pub const commands = @import("imap/commands.zig");
 
 pub const Error = error{
     AuthenticationFailed,
+    CannotStartTLS,
     InvalidArguments,
     InvalidArgumentsOrCommandUnknown,
 };
