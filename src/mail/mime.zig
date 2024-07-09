@@ -58,7 +58,8 @@ pub const Word = struct {
     /// Decodes the word
     pub fn decode(self: Word, allocator: std.mem.Allocator) ![]const u8 {
         // TODO: support more charset encodings
-        if (!std.ascii.eqlIgnoreCase(self.charset, "utf-8")) return error.UnsupportedCharset;
+        if (!std.ascii.eqlIgnoreCase(self.charset, "utf-8") and
+            !std.ascii.eqlIgnoreCase(self.charset, "ansi_x3.4-1968")) return error.UnsupportedCharset;
         switch (self.encoding) {
             'B', 'b' => {
                 var decoder = std.base64.standard.Decoder;
@@ -105,6 +106,17 @@ pub const Word = struct {
         const decoded = try word.?.decode(allocator);
         defer allocator.free(decoded);
         try std.testing.expectEqualStrings("François-Jérôme", decoded);
+    }
+
+    test "decode: quoted-printable ansi_x3" {
+        const allocator = std.testing.allocator;
+        const bytes = "=?ANSI_X3.4-1968?Q?\"The_Power_of_Perspicuity\"_with_Mind=3Fs_Eye_Madness?=";
+        var iter: Word.Iterator = .{ .bytes = bytes };
+        const word = iter.next();
+        try std.testing.expect(word != null);
+        const decoded = try word.?.decode(allocator);
+        defer allocator.free(decoded);
+        try std.testing.expectEqualStrings("\"The_Power_of_Perspicuity\"_with_Mind?s_Eye_Madness", decoded);
     }
 };
 
