@@ -102,9 +102,20 @@ pub fn asText(self: Header, allocator: std.mem.Allocator) ![]const u8 {
 /// 4. Trim whitespace at beginning and end of value
 /// 5. Any group information is stripped
 ///
-/// Caller owns the returned slice
-pub fn asAddresses(_: Header, _: std.mem.Allocator) ![]Address {
-    @panic("unimplemented");
+/// Caller owns the returned slice. The name and spec of each Address is also heap allocated and
+/// owned by the caller. Call deinit on each Address to free the resources
+pub fn asAddresses(self: Header, allocator: std.mem.Allocator) ![]Address {
+    const src = try self.asText(allocator);
+    defer allocator.free(src);
+
+    var list = std.ArrayList(Address).init(allocator);
+    errdefer list.deinit();
+    var iter: Address.Iterator = .{ .src = src };
+    while (try iter.nextAlloc(allocator)) |addr| {
+        try list.append(addr);
+    }
+
+    return list.items;
 }
 
 /// Parses the header as a list of MessageIds. The following transformations occur:
