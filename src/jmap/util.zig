@@ -55,3 +55,10 @@ pub fn jsonAssertString(value: json.Value) json.ParseFromValueError![]const u8 {
         else => return json.ParseFromValueError.UnexpectedToken,
     }
 }
+
+pub fn jsonAssertArray(value: json.Value) json.ParseFromValueError!std.ArrayList(json.Value) {
+    switch (value) {
+        .array => |arr| return arr,
+        else => return json.ParseFromValueError.UnexpectedToken,
+    }
+}
